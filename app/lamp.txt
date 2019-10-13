@@ -1,0 +1,469 @@
+﻿初始化设置 
+shell># vi /etc/sysconfig/iptables
+
+-A INPUT -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT 
+-A INPUT -m state --state NEW -m tcp -p tcp --dport 3306 -j ACCEPT 
+把以上两行代码插入进去然后保存退出
+
+重启防火墙
+shell># service iptables restart 
+
+安装wget工具
+shell># yum install wget -y
+
+(线上服务器可以跳过此步骤)
+换源是为了让下载速度更快
+首先备份/etc/yum.repos.d/CentOS-Base.repo
+shell># cd /etc/yum.repos.d
+shell># mv CentOS-Base.repo CentOS-Base.repo.backup
+
+shell># wget http://mirrors.163.com/.help/CentOS6-Base-163.repo
+shell># cp CentOS6-Base-163.repo CentOS-Base.repo
+
+生成缓存
+shell># yum clean all
+shell># yum makecache
+
+重启系统
+shell># reboot
+
+重启成功重新进入系统后,好先更新一下现有的软件
+shell># yum update -y
+(线上服务器可以跳过此步骤)
+ 
+更新yum源
+yum -y update 
+
+安装依赖库
+yum install -y apr*
+
+安装相关软件
+yum install -y gcc gcc-c++ vsftpd autoconf automake zlib libxml2 libxml2-devel ncurses-devel libmcrypt libtool cmake bison make pcre pcre-devel libevent openssl openssl-devel gd-devel bzip2 bzip2-devel libcurl curl-devel python python-devel mysql-devel expat-devel zlib-devel ncurses libtool-ltdl libtool-ltdl-devel mhash php-mcrypt lrzsz libicu-devel libmcrypt-devel wget exif libxpm-devel libXpm mbstring apr* bzip2* libjpeg* libpng* freetype*
+
+
+一、apache安装 
+
+注意的几点
+1.apache安装在/usr/appweb/apache/目录下
+2.apache将以www用户运行，而且将加入service开机自动运行
+
+第一步安装 apr 和 apr-util
+shell># cd ~
+shell># wget http://archive.apache.org/dist/apr/apr-1.4.8.tar.gz
+shell># mkdir /usr/local/apr
+shell># tar -zxf apr-1.4.8.tar.gz
+shell># cd apr-1.4.8
+shell># ./configure --prefix=/usr/local/apr
+shell># make && make install
+
+shell># cd ~
+shell># wget http://archive.apache.org/dist/apr/apr-util-1.5.2.tar.gz
+shell># mkdir /usr/local/apr-util
+shell># tar -zxf apr-util-1.5.2.tar.gz
+shell># cd apr-util-1.5.2
+shell># ./configure --prefix=/usr/local/apr-util -with-apr=/usr/local/apr/bin/apr-1-config
+shell># make && make install
+
+第二步：安装 apache
+1) 创建 用 户和 组
+shell># mkdir -p /usr/local/httpd
+shell># groupadd www
+shell># useradd -g www -s /usr/sbin/nologin www
+2) 下 载 apache
+shell># cd ~
+shell># wget http://mirrors.sohu.com/apache/httpd-2.4.23.tar.gz  (此链接失效)
+3) 解压 并 进入 目 录
+shell># tar -zxf httpd-2.4.23.tar.gz
+shell># cd httpd-2.4.23
+4) 将 configure 参 数及 详 情解 析 另存 为一 个 文件 ， 以供 学习 参 考用 ：
+
+
+./configure --prefix=/usr/local/httpd --enable-deflate --enable-expires --enable-headers --enable-so --enable-modules=most --with-mpm=worker --enable-rewrite --enable-static-ab --enable-ssl --with-apr=/usr/local/apr --with-apr-util=/usr/local/apr-util
+
+make && make install
+
+
+第三步：配置
+1) 简单 配 置
+
+创建网站根目录 目录自己定义
+shell># mkdir -p /mydata/wwwroot
+shell># chown www:www /mydata/wwwroot
+shell># cd /usr/local/httpd/conf/
+开始配置
+
+先备份配置文件
+shell># cp httpd.conf httpd.conf.back
+shell># vi httpd.conf
+分别找到User和Group和ServerName 
+有注释的就去掉
+内容修改如下 ：
+ User www
+ Group www
+ ServerName localhost:80
+找到modules/mod_rewrite.so把注释去掉
+找到以下代码把里面的  DirectoryIndex index.html
+<IfModule dir_module>
+     DirectoryIndex index.html
+</IfModule>
+改成DirectoryIndex index.htm index.html index.php
+
+2)测试配置文件是否改对
+shell># cd /usr/local/httpd/bin/
+shell># ./httpd -t
+//启动apache
+shell># /usr/local/httpd/bin/apachectl start     
+
+如果显示 Syntax OK 就没问题，如果有错，错误信息会提示哪个文件哪一行有错误
+然后启动apache
+在window下的浏览器输入linux的ip 会显示 It works! 恭喜你apache安装成功
+
+3)设为服务并开机自动运行
+编 辑 apachectl
+shell># vim /usr/local/httpd/bin/apachectl
+在第一行后面加入以下注释内容
+
+# add by 你的名字 修改的时间
+# chkconfig: 2345 85 15
+# description: Activates/Deactivates Apache Web Server
+找到$HTTPD -k $ARGV
+改成$HTTPD -k $ARGV -f /usr/local/httpd/conf/httpd.conf
+保存并重新启动 apache
+shell># /usr/local/httpd/bin/apachectl restart
+
+将httpd设置为服务
+shell># cp /usr/local/httpd/bin/apachectl /etc/rc.d/init.d/httpd
+如果提示是否覆盖 输入  y
+加入 启 动项 ：
+shell># chkconfig --add httpd
+shell># chkconfig --level 345 httpd on
+
+
+第四步：虚拟主机的配置
+1)以下是虚拟主机配置（不配置虚拟主机的跳过此步骤）
+shell># cd /usr/local/httpd/conf/
+shell># vi httpd.conf
+(1)找到httpd-vhosts.conf把注释去掉
+(2)找到以下代码然后注释掉
+httpd-vhosts.conf
+DocumentRoot "/usr/local/httpd/htdocs"
+<Directory "/usr/local/httpd/htdocs">
+    #
+    # Possible values for the Options directive are "None", "All",
+    # or any combination of:
+    #   Indexes Includes FollowSymLinks SymLinksifOwnerMatch ExecCGI MultiViews
+    #
+    # Note that "MultiViews" must be named *explicitly* --- "Options All"
+    # doesn't give it to you.
+    #
+    # The Options directive is both complicated and important.  Please see
+    # http://httpd.apache.org/docs/2.4/mod/core.html#options
+    # for more information.
+    #
+    Options Indexes FollowSymLinks
+
+    #
+    # AllowOverride controls what directives may be placed in .htaccess files.
+    # It can be "All", "None", or any combination of the keywords:
+    #   AllowOverride FileInfo AuthConfig Limit
+    #
+    AllowOverride None
+
+    #
+    # Controls who can get stuff from this server.
+    #
+    Require all granted
+</Directory>
+
+
+
+2)优化虚拟主机配置
+在/usr/local/httpd/conf/extra/httpd-vhosts.conf文件中配置虚拟主机 
+# 默认的网站根 录
+<VirtualHost *:80>
+ServerName localhost
+DocumentRoot "/mydata/wwwroot/"
+	<Directory />
+	# 允许访问该目录
+	Require all granted
+	# 允许执行 .htaccess文件中的指令。
+	AllowOverride All
+	# 不允许浏览目录
+	Options -Indexes
+	</Directory>
+</VirtualHost>
+
+
+
+
+
+
+二、mysql安装 
+
+
+第一步：一些约定和目录创建
+1.mysql 将以 mysql 用户 运 行， 而 且将 加入 service 开 机 自动 运 行
+2.mysql 将被 安 装在 /usr/local/mysql/ 目录 下
+3.mysql 默认 安 装使 用 utf8 字符集
+4.mysql 的数 据 和日 志文 件 保存 在 /usr/local/mysql/data/ 目录 下
+5.mysql 的配 置 文件 保存 于 /usr/local/mysql/etc/my.cnf
+
+
+创建Mysql组和用户 设置不允许登陆系统
+# groupadd mysql && useradd -g mysql mysql -s /sbin/nologin
+
+在/usr/local/mysql 建立 【data】、【tmp】、【log】、【etc】4 个目 录
+shell># mkdir -p /usr/local/mysql
+shell># cd /usr/local/mysql
+shell># mkdir data tmp log etc
+
+yum install gcc gcc-c++ autoconf automake zlib libxml2 libxml2-devel ncurses-devel libmcrypt libtool cmake bison make pcre pcre-devel libevent openssl openssl-devel gd-devel bzip2 bzip2-devel libcurl curl-devel python python-devel mysql-devel expat-devel -y
+
+shell># 
+
+解压mysql包
+shell># tar zxvf mysql-5.6.21.tar.gz && cd mysql-5.6.21
+执行Cmake编译Mysql指定安装目录，数据存放目录，配置文件存放目录，出现如下语句说明cmake成功
+# 
+-DMYSQL_DATADIR
+第二步：编译安装
+cmake \
+-DCMAKE_INSTALL_PREFIX=/usr/local/mysql \
+-DMYSQL_DATADIR=/usr/local/mysql/data \
+-DSYSCONFDIR=/usr/local/mysql/etc \
+-DWITH_MYISAM_STORAGE_ENGINE=1 \
+-DMYSQL_USER=mysql \
+-DWITH_INNOBASE_STORAGE_ENGINE=1 \
+-DWITH_MEMORY_STORAGE_ENGINE=1 \
+-DWITH_READLINE=1 \
+-DMYSQL_UNIX_ADDR=/usr/local/mysql/tmp/mysql.sock \
+-DMYSQL_TCP_PORT=3306 \
+-DENABLED_LOCAL_INFILE=1 \
+-DWITH_PARTITION_STORAGE_ENGINE=1 \
+-DEXTRA_CHARSETS=all \
+-DDEFAULT_CHARSET=utf8 \
+-DDEFAULT_COLLATION=utf8_general_ci \
+-DWITH_DEBUG=0 \
+-DWITH_FEDERATED_STORAGE_ENGINE=1 \
+-DWITH_ARCHIVE_STORAGE_ENGINE=1 \
+-DWITH_BLACKHOLE_STORAGE_ENGINE=1 \
+-DWITH_EMBEDDED_SERVER=1 \
+-DWITH_EXTRA_CHARSETS:STRING=utf8,gbk \
+-DWITH_SSL=yes
+
+make && make install
+
+第三步：配置
+1)修改权限
+shell># chown -R mysql:mysql /usr/local/mysql
+
+删除 /etc/my.cnf
+shell># unlink /etc/my.cnf
+2) 进 MySQL安装目录下
+shell># cd /usr/local/mysql
+重建my.cnf文件
+shell># cp support-files/my-default.cnf etc/my.cnf
+
+3）mysql.cnf文件的基本配置
+shell># vim etc/my.cnf
+把里面的内容全部删除掉（不删除也可以）写入以下内容然后保存退出：
+
+[client]
+default-character-set = utf8
+port = 3306
+socket = /usr/local/mysql/tmp/mysql.sock
+[mysqld]
+datadir =/usr/local/mysql/data
+port = 3306
+socket = /usr/local/mysql/tmp/mysql.sock
+user = mysql
+symbolic-links = 0
+pid-file = /usr/local/mysql/tmp/mysql.pid
+explicit_defaults_for_timestamp = true
+sql_mode = ERROR_FOR_DIVISION_BY_ZERO,NO_ZERO_DATE,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER
+slow_query_log = on
+slow_query_log_file = /usr/local/mysql/log/slow.log
+long_query_time = 2
+log_error = /usr/local/mysql/log/mysql.err
+
+
+第四步：初始化和启动
+1)初始化mysql的基本表
+shell># /usr/local/mysql/scripts/mysql_install_db --defaults-file=/usr/local/mysql/my.cnf --basedir=/usr/local/mysql --datadir=/usr/local/mysql/data --user=mysql
+
+2)启动mysql 
+shell># /usr/local/mysql/bin/mysqld_safe > /dev/null 2>&1 &
+用 netstat -lntp 查看有没有3306，有3306就说明启动成功
+
+
+3)修改mysql的root密码
+shell># /usr/local/mysql/bin/mysqladmin -u root password 你的密码
+
+
+4)增加到开机启动
+先将mysqld设置为服务
+shell># cp /usr/local/mysql/support-files/mysql.server /etc/rc.d/init.d/mysqld
+然后将mysqld服务加入启动项 ：
+shell># chkconfig --add mysqld
+设置为自启 动 ：
+shell># chkconfig --level 345 mysqld on
+5)将mysql命令加入到环境变量里
+shell># PATH=$PATH:/usr/local/mysql/bin
+为了重启后仍能有效：
+shell># echo 'PATH=$PATH:/usr/local/mysql/bin' >> /root/.bashrc
+
+
+注意如果登录报错为：
+ERROR 2002 (HY000): Can't connect to local MySQL server through socket '/var/lib/mysql/mysql.sock' (2)
+请执行以下两行代码
+shell># mkdir -pv /var/lib/mysql
+shell># ln -s /usr/local/mysql/tmp/mysql.sock /var/lib/mysql/mysql.sock
+
+
+三、PHP安装
+
+以下安装中涉及的几点需要提前说明的问题 ：
+所有下载的文件将保存在/root目录下
+php 将以FastCGI模式运行,监听9000端口
+php 将被安装在 /usr/local/php/目录下
+php 的配置文件保存于/usr/local/php/etc/php.ini
+php 的扩展库文件，如果可以的话，尽量放在
+/usr/local/php/lib/php/extensions/目录下
+(1) 第一步：安装PHP
+1)下载php
+shell># cd ~
+shell># wget http://mirrors.sohu.com/php/php-5.6.24.tar.gz
+2) 解压并进入目录
+shell># tar zxf php-5.6.24.tar.gz 
+shell># cd php-5.6.24
+3)将 configure 参数及详情解析另存为一个文件,以供学习参考用 ：
+shell># ./configure --help > php_configure.txt
+4)编译安装
+
+
+./configure \
+--disable-fileinfo \
+--prefix=/usr/local/php \
+--sysconfdir=/usr/local/php/etc \
+--with-config-file-path=/usr/local/php/etc \
+--with-config-file-scan-dir=/usr/local/php/etc/conf.d \
+--enable-maintainer-zts \
+--enable-phpdbg \
+--enable-fpm \
+--enable-static \
+--enable-opcache \
+--with-fpm-user=www \
+--with-fpm-group=www \
+--with-zend-vm=GOTO \
+--enable-inline-optimization \
+--disable-debug \
+--disable-short-tags \
+--without-pear \
+--enable-bcmath \
+--with-mysql=mysqlnd \
+--with-mysqli=mysqlnd \
+--with-pdo-mysql \
+--without-pdo-sqlite \
+--disable-ipv6 \
+--with-curl \
+--enable-ftp \
+--enable-sockets \
+--with-openssl \
+--with-bz2 \
+--with-zlib \
+--with-zlib-dir \
+--enable-zip \
+--enable-json \
+--with-iconv \
+--with-iconv-dir \
+--with-pcre-regex \
+--with-pcre-dir \
+--enable-mbstring \
+--enable-mbregex \
+--with-gettext \
+--with-mhash \
+--disable-calendar \
+--enable-gd-jis-conv \
+--with-gd \
+--with-freetype-dir \
+--with-jpeg-dir \
+--with-png-dir \
+--enable-gd-native-ttf \
+--enable-exif \
+--enable-xml \
+--with-libxml-dir \
+--enable-soap \
+--disable-xmlwriter \
+--disable-xmlreader \
+--enable-sysvsem \
+--enable-sysvmsg \
+--enable-shmop \
+--enable-sysvshm \
+--enable-pcntl \
+--disable-flatfile \
+--enable-fd-setsize=4096 \
+--enable-intl \
+--with-xpm-dir
+
+
+shell># make && make install
+
+如果出现以下错误：
+virtual memory exhausted: Cannot allocate memory
+make: *** [ext/fileinfo/libmagic/apprentice.lo] Error 1
+把解压的php文件夹删除掉重新解压一份然后
+在
+./configure \ 下一行加上 --disable-fileinfo \
+
+(2)：配置
+1) 复制配置文件
+shell># cp php.ini-production /usr/local/php/etc/php.ini
+shell># cp sapi/fpm/init.d.php-fpm /etc/rc.d/init.d/php-fpm
+赋予其可执行权限
+shell># chmod +x /etc/rc.d/init.d/php-fpm
+拷贝产生php-fpm的配置 件
+shell># cd /usr/local/php/etc
+shell># cp php-fpm.conf.default php-fpm.conf
+shell># vim php-fpm.conf
+找到user = nobody 和 group = nobody， 将 nobody 改 成 www
+找到listen.owner=nobody和listen.group= nobody将nobody改成 www
+
+2) 将 php-fpm 加 入服 务 并自 动 启动
+shell># service php-fpm start
+shell># chkconfig --add php-fpm
+shell># chkconfig --level 345 php-fpm on
+
+3) 配置php.ini 
+
+
+shell># vim php.ini
+ 找 到 ;date.timezone = 修改为 date.timezone = Asia/Shanghai
+根据自己的需求调整以下选项的值
+error_reporting = E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED
+display_errors = On
+
+max_execution_time = 60
+max_input_time = 60
+memory_limit = 256M
+post_max_size = 256M
+upload_max_filesize = 256M
+
+
+
+
+(3)：整合PHP
+1) 修改 apache 的配置文件
+shell># vim /usr/local/httpd/conf/httpd.conf
+去掉以下两项的注 释
+# uncomment by 你的名字  修改的时间日期
+LoadModule proxy_module modules/mod_proxy.so
+# uncomment by 你的名字  修改的时间日期
+LoadModule proxy_fcgi_module modules/mod_proxy_fcgi.so
+
+在底部加上
+<FilesMatch \.php$>
+SetHandler "proxy:fcgi://127.0.0.1:9000"
+</FilesMatch>
+
+保存重启 apache
+shell># service httpd restart
